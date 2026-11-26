@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Auto Click</string>
+    <string name="accessibility_service_label">Auto Click</string>
+    <string name="accessibility_service_description">사용자가 만든 루틴에 따라 지정한 위치에 탭·길게 누르기·스와이프 제스처를 보냅니다. 화면 내용은 읽거나 저장하지 않습니다.</string>
+</resources>
