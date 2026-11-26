@@ -2,6 +2,19 @@
 
 Flutter로 만든 자동 클릭 앱입니다. 지점 탭, 영역 랜덤 탭, 길게 누르기, 스와이프, 대기를 조합해 **루틴**을 만들고, **프리셋**으로 저장해 반복 실행합니다.
 
+## 다운로드 (Android)
+
+**[최신 릴리즈 페이지](https://github.com/seeminglyjs/auto_click/releases/latest)**
+
+| 파일 | 대상 |
+| --- | --- |
+| **[AutoClick-v1.0.0-arm64-v8a.apk](https://github.com/seeminglyjs/auto_click/releases/download/v1.0.0/AutoClick-v1.0.0-arm64-v8a.apk)** (17 MB) | 대부분의 최신 안드로이드 폰 (**권장**) |
+| [AutoClick-v1.0.0-armeabi-v7a.apk](https://github.com/seeminglyjs/auto_click/releases/download/v1.0.0/AutoClick-v1.0.0-armeabi-v7a.apk) (15 MB) | 오래된 32비트 폰 |
+| [AutoClick-v1.0.0-x86_64.apk](https://github.com/seeminglyjs/auto_click/releases/download/v1.0.0/AutoClick-v1.0.0-x86_64.apk) (19 MB) | 에뮬레이터 / x86 기기 |
+| [AutoClick-v1.0.0-universal.apk](https://github.com/seeminglyjs/auto_click/releases/download/v1.0.0/AutoClick-v1.0.0-universal.apk) (49 MB) | 기기 종류를 모를 때 (모든 기기) |
+
+Android 7.0 이상에서 동작합니다. 폰에서 링크를 눌러 받은 뒤 설치하세요. 설치할 때 "출처를 알 수 없는 앱" 허용이 필요할 수 있습니다. 설치 후에는 아래 [Android 사용법](#android-사용법)을 따라 하면 됩니다.
+
 ## 플랫폼별 지원 범위
 
 | 기능 | Android | iOS | Web |
