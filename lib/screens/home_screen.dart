@@ -6,6 +6,7 @@ import '../models/templates.dart';
 import '../services/native_bridge.dart';
 import '../services/routine_store.dart';
 import '../services/run_actions.dart';
+import 'guide_screen.dart';
 import 'routine_editor_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -79,6 +80,11 @@ class HomeScreen extends StatelessWidget {
       appBar: AppBar(
         title: const Text('Auto Click'),
         actions: [
+          IconButton(
+            tooltip: '사용 방법',
+            icon: const Icon(Icons.help_outline),
+            onPressed: () => openGuide(context),
+          ),
           if (NativeBridge.isSupported)
             IconButton(
               tooltip: '권한 설정',
@@ -122,7 +128,7 @@ class HomeScreen extends StatelessWidget {
           return ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
             children: [
-              const PlatformStatusCard(),
+              const QuickStartCard(),
               const SizedBox(height: 16),
               Text('프리셋 ${list.length}개',
                   style: Theme.of(context).textTheme.titleMedium),
@@ -216,6 +222,12 @@ class _RoutineCard extends StatelessWidget {
                   ],
                 ),
               ),
+              if (NativeBridge.isSupported)
+                IconButton(
+                  tooltip: '플로팅 패널로 열기 (위치 추가 · 편집)',
+                  onPressed: () => openOverlay(context, routine),
+                  icon: const Icon(Icons.picture_in_picture_alt),
+                ),
               IconButton.filledTonal(
                 tooltip: '실행',
                 onPressed: () => runRoutine(context, routine),
@@ -238,99 +250,204 @@ class _RoutineCard extends StatelessWidget {
   }
 }
 
-/// 플랫폼별 동작 가능 여부와 권한 상태를 보여준다.
-class PlatformStatusCard extends StatelessWidget {
-  const PlatformStatusCard({super.key});
+/// 홈 맨 위 “시작 가이드” 카드. 지금 해야 할 다음 행동을 한 가지씩 보여준다.
+class QuickStartCard extends StatelessWidget {
+  const QuickStartCard({super.key});
 
   @override
   Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
     if (!NativeBridge.isSupported) {
       return Card.filled(
         color: scheme.secondaryContainer,
-        child: const ListTile(
-          leading: Icon(Icons.info_outline),
-          title: Text('앱 내부(테스트 패드) 모드'),
-          subtitle: Text(
-            'iOS · 웹은 OS 보안 정책상 다른 앱/페이지에 터치를 보낼 수 없습니다. '
-            '루틴 작성 · 프리셋 관리 · 테스트 패드 실행은 모두 가능하며, '
-            '다른 앱 위 자동 클릭은 Android 에서 지원됩니다.',
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('앱 안에서 루틴 만들기 · 테스트',
+                  style: theme.textTheme.titleMedium),
+              const SizedBox(height: 6),
+              const Text(
+                'iOS · 웹은 OS 보안 정책상 다른 앱을 누를 수 없어요. 루틴 작성 · 프리셋 관리와 '
+                '테스트 패드 실행은 모두 가능하고, 다른 앱 위 자동 클릭은 Android 에서 지원됩니다.',
+              ),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(
+                onPressed: () => openGuide(context),
+                icon: const Icon(Icons.help_outline),
+                label: const Text('사용 방법 보기'),
+              ),
+            ],
           ),
-          isThreeLine: true,
         ),
       );
     }
     final bridge = NativeBridge.instance;
     return ValueListenableBuilder<bool>(
       valueListenable: bridge.serviceEnabled,
-      builder: (context, enabled, _) {
-        if (enabled) {
-          return ValueListenableBuilder<bool>(
-            valueListenable: bridge.running,
-            builder: (context, running, _) => Card.filled(
-              color: scheme.primaryContainer,
-              child: ListTile(
-                leading: Icon(running
-                    ? Icons.play_circle
-                    : Icons.check_circle_outline),
-                title: Text(running ? '루틴 실행 중' : '접근성 서비스 연결됨'),
-                subtitle: const Text('다른 앱 위에서 자동 클릭을 사용할 수 있습니다.'),
-                trailing: running
-                    ? FilledButton(
-                        onPressed: bridge.stopRoutine,
-                        child: const Text('정지'))
-                    : IconButton(
-                        tooltip: '플로팅 패널 닫기',
-                        onPressed: bridge.hideOverlay,
-                        icon: const Icon(Icons.close_fullscreen)),
-              ),
-            ),
-          );
-        }
-        return Card.filled(
-          color: scheme.errorContainer,
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(children: [
-                  Icon(Icons.accessibility_new, color: scheme.onErrorContainer),
-                  const SizedBox(width: 8),
-                  Text('접근성 권한이 꺼져 있어요',
-                      style: Theme.of(context).textTheme.titleMedium),
-                ]),
-                const SizedBox(height: 8),
-                const Text(
-                    '설정 › 접근성 › 설치된 앱 › Auto Click 을 켜면 어느 앱 위에서든 '
-                    '탭 · 스와이프를 자동으로 실행할 수 있습니다.'),
-                const SizedBox(height: 12),
-                Wrap(spacing: 8, runSpacing: 8, children: [
-                  FilledButton.icon(
-                    onPressed: bridge.openAccessibilitySettings,
-                    icon: const Icon(Icons.open_in_new),
-                    label: const Text('권한 설정하기'),
-                  ),
-                  OutlinedButton.icon(
-                    onPressed: bridge.openAppSettings,
-                    icon: const Icon(Icons.app_settings_alt),
-                    label: const Text('앱 정보 열기'),
-                  ),
-                ]),
-                const SizedBox(height: 8),
-                Text(
-                  '“제한된 설정” 이라며 켜지지 않으면 앱 정보 › 오른쪽 위 ⋮ › '
-                  '“제한된 설정 허용” 후 다시 시도하세요.',
-                  style: Theme.of(context).textTheme.bodySmall,
+      builder: (context, enabled, _) => ValueListenableBuilder<String?>(
+        valueListenable: bridge.overlayRoutineId,
+        builder: (context, overlayId, _) => ValueListenableBuilder<bool>(
+          valueListenable: bridge.running,
+          builder: (context, running, _) {
+            final panelOpen = overlayId != null;
+            return Card.filled(
+              color: enabled
+                  ? scheme.primaryContainer
+                  : scheme.surfaceContainerHigh,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(children: [
+                      Text('시작 가이드', style: theme.textTheme.titleMedium),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () => openGuide(context),
+                        icon: const Icon(Icons.help_outline, size: 18),
+                        label: const Text('사용 방법'),
+                      ),
+                    ]),
+                    _GuideStep(
+                      number: 1,
+                      done: enabled,
+                      title: '접근성 권한 켜기',
+                      desc: enabled ? '켜져 있어요' : '다른 앱을 누르기 위해 필요한 유일한 권한',
+                      action: enabled
+                          ? null
+                          : FilledButton.icon(
+                              onPressed: bridge.openAccessibilitySettings,
+                              icon: const Icon(Icons.open_in_new, size: 18),
+                              label: const Text('권한 설정하기'),
+                            ),
+                    ),
+                    _GuideStep(
+                      number: 2,
+                      done: panelOpen,
+                      title: '플로팅 패널 열기',
+                      desc: panelOpen
+                          ? (running ? '루틴 실행 중' : '다른 앱 위에 패널이 떠 있어요')
+                          : '최근 루틴으로 패널을 엽니다 · 패널의 설정에서 다른 프리셋으로 전환',
+                      action: !enabled
+                          ? null
+                          : panelOpen
+                              ? Wrap(spacing: 8, children: [
+                                  if (running)
+                                    FilledButton(
+                                        onPressed: bridge.stopRoutine,
+                                        child: const Text('정지')),
+                                  OutlinedButton(
+                                      onPressed: bridge.hideOverlay,
+                                      child: const Text('패널 닫기')),
+                                ])
+                              : FilledButton.icon(
+                                  onPressed: () => openPanelQuick(context),
+                                  icon: const Icon(
+                                      Icons.picture_in_picture_alt,
+                                      size: 18),
+                                  label: const Text('플로팅 패널 열기'),
+                                ),
+                    ),
+                    const _GuideStep(
+                      number: 3,
+                      done: false,
+                      title: '누를 앱에서 ＋ 추가 → ▶ 실행',
+                      desc: '위치를 찍으면 번호 마커가 생겨요. 마커를 누르면 클릭 주기 · 반복 설정, '
+                          '끌면 위치 이동. 저장 버튼으로 프리셋 저장.',
+                    ),
+                    if (!enabled)
+                      Padding(
+                        padding: const EdgeInsets.only(left: 40, top: 4),
+                        child: Wrap(
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            Text('“제한된 설정” 때문에 안 켜지면 ',
+                                style: theme.textTheme.bodySmall),
+                            InkWell(
+                              onTap: bridge.openAppSettings,
+                              child: Text('앱 정보',
+                                  style: theme.textTheme.bodySmall?.copyWith(
+                                      color: scheme.primary,
+                                      decoration: TextDecoration.underline)),
+                            ),
+                            Text(' › ⋮ › 제한된 설정 허용',
+                                style: theme.textTheme.bodySmall),
+                          ],
+                        ),
+                      ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-        );
-      },
+              ),
+            );
+          },
+        ),
+      ),
     );
   }
 }
+
+class _GuideStep extends StatelessWidget {
+  const _GuideStep({
+    required this.number,
+    required this.done,
+    required this.title,
+    required this.desc,
+    this.action,
+  });
+
+  final int number;
+  final bool done;
+  final String title;
+  final String desc;
+  final Widget? action;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final scheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          CircleAvatar(
+            radius: 14,
+            backgroundColor: done ? const Color(0xFF2E7D32) : scheme.primary,
+            child: done
+                ? const Icon(Icons.check, size: 16, color: Colors.white)
+                : Text('$number',
+                    style: TextStyle(
+                        color: scheme.onPrimary,
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: theme.textTheme.titleSmall
+                        ?.copyWith(fontWeight: FontWeight.bold)),
+                Text(desc, style: theme.textTheme.bodySmall),
+                if (action != null) ...[
+                  const SizedBox(height: 8),
+                  action!,
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+void openGuide(BuildContext context) => Navigator.of(context)
+    .push(MaterialPageRoute(builder: (_) => const GuideScreen()));
 
 /// 언제든 열 수 있는 권한 설정 바로가기 시트.
 Future<void> showPermissionSheet(BuildContext context) async {

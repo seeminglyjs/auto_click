@@ -26,6 +26,17 @@ class RoutineStore extends ChangeNotifier {
 
   Future<void> load() async {
     _prefs = await SharedPreferences.getInstance();
+    _readFromDisk();
+    if (_items.isEmpty && !(_prefs!.getBool(_seededKey) ?? false)) {
+      // 첫 실행이면 예시 루틴 하나를 넣어둔다.
+      _items.add(routineTemplates.last.build());
+      await _prefs!.setBool(_seededKey, true);
+      await _persist();
+    }
+    notifyListeners();
+  }
+
+  void _readFromDisk() {
     final raw = _prefs!.getString(_key);
     _items.clear();
     if (raw != null) {
@@ -35,12 +46,15 @@ class RoutineStore extends ChangeNotifier {
         debugPrint('routine load failed: $e');
       }
     }
-    if (_items.isEmpty && !(_prefs!.getBool(_seededKey) ?? false)) {
-      // 첫 실행이면 예시 루틴 하나를 넣어둔다.
-      _items.add(routineTemplates.last.build());
-      await _prefs!.setBool(_seededKey, true);
-      await _persist();
-    }
+  }
+
+  /// 디스크에서 다시 읽는다. Android 오버레이 패널이 같은 저장소에 직접
+  /// 저장하므로, 앱으로 돌아올 때 호출해 패널에서 한 변경을 반영한다.
+  Future<void> reload() async {
+    final prefs = _prefs;
+    if (prefs == null) return;
+    await prefs.reload();
+    _readFromDisk();
     notifyListeners();
   }
 
@@ -64,6 +78,7 @@ class RoutineStore extends ChangeNotifier {
     _items.removeWhere((e) => e.id == id);
     notifyListeners();
     await _persist();
+    await NativeBridge.instance.removeFromOverlay(id);
   }
 
   Future<Routine> duplicate(Routine r) async {

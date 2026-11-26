@@ -30,7 +30,7 @@ class NativeBridge {
   /// 현재 오버레이에 올라간 루틴 ID (없으면 null).
   final overlayRoutineId = ValueNotifier<String?>(null);
 
-  /// 오버레이에서 단계를 추가/삭제했을 때 호출된다.
+  /// 오버레이 패널에서 루틴을 바꾸거나 저장했을 때 호출된다.
   void Function(Routine routine)? onRoutineFromNative;
 
   Future<T?> _invoke<T>(String method, [Object? args]) async {
@@ -100,17 +100,16 @@ class NativeBridge {
     running.value = false;
   }
 
-  /// 앱에서 편집한 루틴이 오버레이에 떠 있으면 그 내용도 갱신한다.
+  /// 오버레이가 떠 있으면 앱에서 편집한 루틴을 오버레이 목록에도 반영한다.
   Future<void> syncIfOverlay(Routine r) async {
-    if (overlayRoutineId.value != r.id) return;
+    if (overlayRoutineId.value == null) return;
     await _invoke('updateOverlayRoutine', {'routine': jsonEncode(r.toJson())});
   }
 
-  /// 오버레이에서 변경된 루틴이 있으면 가져온다 (앱 복귀 시 호출).
-  Future<Routine?> takeOverlayRoutine() async {
-    final raw = await _invoke<String>('takeOverlayRoutine');
-    if (raw == null) return null;
-    return Routine.fromJson(Map<String, dynamic>.from(jsonDecode(raw) as Map));
+  /// 앱에서 삭제한 루틴을 오버레이 목록에서도 뺀다.
+  Future<void> removeFromOverlay(String id) async {
+    if (overlayRoutineId.value == null) return;
+    await _invoke('removeOverlayRoutine', {'id': id});
   }
 
   Future<dynamic> _onCall(MethodCall call) async {
@@ -126,7 +125,9 @@ class NativeBridge {
       case 'run':
         running.value = ev['running'] == true;
       case 'overlay':
-        if (ev['visible'] != true) {
+        if (ev['visible'] == true) {
+          overlayRoutineId.value = ev['routineId'] as String?;
+        } else {
           overlayRoutineId.value = null;
           running.value = false;
         }

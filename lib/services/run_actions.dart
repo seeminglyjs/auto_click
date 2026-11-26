@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../models/routine.dart';
+import '../utils/ids.dart';
+import 'routine_store.dart';
 import '../screens/sandbox_screen.dart';
 import 'native_bridge.dart';
 
@@ -76,4 +78,15 @@ void openSandbox(BuildContext context, String routineId,
     fullscreenDialog: true,
     builder: (_) => SandboxScreen(routineId: routineId, autoStart: autoStart),
   ));
+}
+
+/// 홈의 “플로팅 패널 열기”: 가장 최근 루틴으로 패널을 연다 (없으면 새로 만든다).
+Future<void> openPanelQuick(BuildContext context) async {
+  final list = routineStore.routines;
+  var r = list.isNotEmpty ? list.first : null;
+  if (r == null) {
+    r = Routine(id: newId(), name: '새 루틴', loopCount: 0, loopIntervalMs: 0);
+    await routineStore.upsert(r);
+  }
+  if (context.mounted) await openOverlay(context, r);
 }

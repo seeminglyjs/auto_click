@@ -62,7 +62,10 @@ class MainActivity : FlutterActivity() {
                     service?.updateRoutine(call.argument<String>("routine")!!)
                     result.success(null)
                 }
-                "takeOverlayRoutine" -> result.success(service?.takeRoutineIfDirty())
+                "removeOverlayRoutine" -> {
+                    service?.removeRoutine(call.argument<String>("id")!!)
+                    result.success(null)
+                }
                 "stopRoutine" -> {
                     service?.stopRoutine()
                     result.success(null)

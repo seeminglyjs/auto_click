@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+import 'screens/guide_screen.dart';
 import 'screens/home_screen.dart';
 import 'services/native_bridge.dart';
 import 'services/routine_store.dart';
@@ -7,13 +9,17 @@ import 'services/routine_store.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await routineStore.load();
+  final prefs = await SharedPreferences.getInstance();
+  final onboarded = prefs.getBool(onboardedKey) ?? false;
   NativeBridge.instance.onRoutineFromNative =
       (r) => routineStore.upsert(r, fromNative: true);
-  runApp(const AutoClickApp());
+  runApp(AutoClickApp(showGuide: !onboarded));
 }
 
 class AutoClickApp extends StatefulWidget {
-  const AutoClickApp({super.key});
+  const AutoClickApp({super.key, this.showGuide = false});
+
+  final bool showGuide;
 
   @override
   State<AutoClickApp> createState() => _AutoClickAppState();
@@ -39,13 +45,11 @@ class _AutoClickAppState extends State<AutoClickApp>
     if (state == AppLifecycleState.resumed) _syncNative();
   }
 
-  /// 앱으로 돌아올 때 권한 상태와 오버레이에서 수정된 루틴을 가져온다.
+  /// 앱으로 돌아올 때: 권한 상태 갱신 + 패널에서 저장한 프리셋 다시 읽기.
   Future<void> _syncNative() async {
     if (!NativeBridge.isSupported) return;
-    final bridge = NativeBridge.instance;
-    await bridge.refreshServiceStatus();
-    final changed = await bridge.takeOverlayRoutine();
-    if (changed != null) await routineStore.upsert(changed, fromNative: true);
+    await NativeBridge.instance.refreshServiceStatus();
+    await routineStore.reload();
   }
 
   @override
@@ -59,7 +63,9 @@ class _AutoClickAppState extends State<AutoClickApp>
           colorSchemeSeed: seed,
           brightness: Brightness.dark,
           useMaterial3: true),
-      home: const HomeScreen(),
+      home: widget.showGuide
+          ? const GuideScreen(firstRun: true)
+          : const HomeScreen(),
     );
   }
 }
