@@ -232,7 +232,7 @@ class _RoutineEditorScreenState extends State<RoutineEditorScreen> {
               Text('단계 ${r.steps.length}개', style: theme.textTheme.titleMedium),
               const Spacer(),
               if (NativeBridge.isSupported)
-                Text('오버레이 편집으로 실제 화면 위에서 추가',
+                Text('패널로 열면 실제 화면 위에서 추가',
                     style: theme.textTheme.bodySmall),
             ],
           ),
@@ -318,7 +318,7 @@ class _RoutineEditorScreenState extends State<RoutineEditorScreen> {
                 child: FilledButton.tonalIcon(
                   onPressed: () => openOverlay(context, r),
                   icon: const Icon(Icons.picture_in_picture_alt),
-                  label: const Text('오버레이 편집'),
+                  label: const Text('패널로 열기'),
                 ),
               ),
             ],

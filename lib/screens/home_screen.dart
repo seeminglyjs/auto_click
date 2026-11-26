@@ -159,6 +159,8 @@ class _RoutineCard extends StatelessWidget {
 
   Future<void> _menu(BuildContext context, String v) async {
     switch (v) {
+      case 'edit':
+        onOpen();
       case 'dup':
         await routineStore.duplicate(routine);
       case 'sandbox':
@@ -198,48 +200,60 @@ class _RoutineCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         onTap: onOpen,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
-          child: Row(
+          padding: const EdgeInsets.fromLTRB(16, 12, 4, 8),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CircleAvatar(
-                backgroundColor: scheme.primaryContainer,
-                child: Text('${routine.steps.length}',
-                    style: TextStyle(color: scheme.onPrimaryContainer)),
-              ),
-              const SizedBox(width: 16),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(routine.name,
-                        style: Theme.of(context).textTheme.titleMedium,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis),
-                    Text(
-                      '${routine.steps.length}단계 · ${routine.loopSummary}',
-                      style: Theme.of(context).textTheme.bodySmall,
+              Row(
+                children: [
+                  CircleAvatar(
+                    backgroundColor: scheme.primaryContainer,
+                    child: Text('${routine.steps.length}',
+                        style: TextStyle(color: scheme.onPrimaryContainer)),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(routine.name,
+                            style: Theme.of(context).textTheme.titleMedium,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis),
+                        Text(
+                          '${routine.steps.length}단계 · ${routine.loopSummary}',
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ),
-                  ],
-                ),
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (v) => _menu(context, v),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 'edit', child: Text('앱에서 편집')),
+                      PopupMenuItem(value: 'sandbox', child: Text('테스트 패드에서 실행')),
+                      PopupMenuItem(value: 'dup', child: Text('복제')),
+                      PopupMenuItem(value: 'copy', child: Text('JSON 복사')),
+                      PopupMenuItem(value: 'delete', child: Text('삭제')),
+                    ],
+                  ),
+                ],
               ),
-              if (NativeBridge.isSupported)
-                IconButton(
-                  tooltip: '플로팅 패널로 열기 (위치 추가 · 편집)',
-                  onPressed: () => openOverlay(context, routine),
-                  icon: const Icon(Icons.picture_in_picture_alt),
-                ),
-              IconButton.filledTonal(
-                tooltip: '실행',
-                onPressed: () => runRoutine(context, routine),
-                icon: const Icon(Icons.play_arrow),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (v) => _menu(context, v),
-                itemBuilder: (_) => const [
-                  PopupMenuItem(value: 'sandbox', child: Text('테스트 패드에서 실행')),
-                  PopupMenuItem(value: 'dup', child: Text('복제')),
-                  PopupMenuItem(value: 'copy', child: Text('JSON 복사')),
-                  PopupMenuItem(value: 'delete', child: Text('삭제')),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                children: [
+                  FilledButton.tonalIcon(
+                    onPressed: () => runRoutine(context, routine),
+                    icon: const Icon(Icons.play_arrow, size: 18),
+                    label: const Text('실행'),
+                  ),
+                  if (NativeBridge.isSupported)
+                    OutlinedButton.icon(
+                      onPressed: () => openOverlay(context, routine),
+                      icon: const Icon(Icons.picture_in_picture_alt, size: 18),
+                      label: const Text('이 루틴으로 패널 열기'),
+                    ),
                 ],
               ),
             ],
@@ -249,7 +263,6 @@ class _RoutineCard extends StatelessWidget {
     );
   }
 }
-
 /// 홈 맨 위 “시작 가이드” 카드. 지금 해야 할 다음 행동을 한 가지씩 보여준다.
 class QuickStartCard extends StatelessWidget {
   const QuickStartCard({super.key});
@@ -287,12 +300,11 @@ class QuickStartCard extends StatelessWidget {
     final bridge = NativeBridge.instance;
     return ValueListenableBuilder<bool>(
       valueListenable: bridge.serviceEnabled,
-      builder: (context, enabled, _) => ValueListenableBuilder<String?>(
-        valueListenable: bridge.overlayRoutineId,
-        builder: (context, overlayId, _) => ValueListenableBuilder<bool>(
+      builder: (context, enabled, _) => ValueListenableBuilder<bool>(
+        valueListenable: bridge.overlayVisible,
+        builder: (context, panelOpen, _) => ValueListenableBuilder<bool>(
           valueListenable: bridge.running,
           builder: (context, running, _) {
-            final panelOpen = overlayId != null;
             return Card.filled(
               color: enabled
                   ? scheme.primaryContainer
@@ -330,7 +342,7 @@ class QuickStartCard extends StatelessWidget {
                       title: '플로팅 패널 열기',
                       desc: panelOpen
                           ? (running ? '루틴 실행 중' : '다른 앱 위에 패널이 떠 있어요')
-                          : '최근 루틴으로 패널을 엽니다 · 패널의 설정에서 다른 프리셋으로 전환',
+                          : '빈 패널로 새 작업을 시작해요. 저장된 루틴은 아래 목록의 “이 루틴으로 패널 열기”',
                       action: !enabled
                           ? null
                           : panelOpen
@@ -356,7 +368,7 @@ class QuickStartCard extends StatelessWidget {
                       done: false,
                       title: '누를 앱에서 ＋ 추가 → ▶ 실행',
                       desc: '위치를 찍으면 번호 마커가 생겨요. 마커를 누르면 클릭 주기 · 반복 설정, '
-                          '끌면 위치 이동. 저장 버튼으로 프리셋 저장.',
+                          '끌면 위치 이동. 저장 버튼을 누르면 이름을 정해 프리셋으로 저장됩니다.',
                     ),
                     if (!enabled)
                       Padding(

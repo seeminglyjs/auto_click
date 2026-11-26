@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../models/routine.dart';
-import '../utils/ids.dart';
-import 'routine_store.dart';
 import '../screens/sandbox_screen.dart';
 import 'native_bridge.dart';
 
@@ -80,13 +78,10 @@ void openSandbox(BuildContext context, String routineId,
   ));
 }
 
-/// 홈의 “플로팅 패널 열기”: 가장 최근 루틴으로 패널을 연다 (없으면 새로 만든다).
+/// 홈의 “플로팅 패널 열기”: 프리셋 없이 빈 패널(새 작업)을 연다.
+/// 저장된 루틴으로 열려면 프리셋 목록의 “패널로 열기” 를 쓴다.
 Future<void> openPanelQuick(BuildContext context) async {
-  final list = routineStore.routines;
-  var r = list.isNotEmpty ? list.first : null;
-  if (r == null) {
-    r = Routine(id: newId(), name: '새 루틴', loopCount: 0, loopIntervalMs: 0);
-    await routineStore.upsert(r);
-  }
-  if (context.mounted) await openOverlay(context, r);
+  if (!await ensureAccessibility(context)) return;
+  final ok = await NativeBridge.instance.showEmptyOverlay();
+  if (!ok && context.mounted) _snack(context, '패널을 띄우지 못했습니다.');
 }

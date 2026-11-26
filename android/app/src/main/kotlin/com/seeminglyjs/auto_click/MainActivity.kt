@@ -53,6 +53,11 @@ class MainActivity : FlutterActivity() {
                     service.showOverlay(call.argument<String>("routine")!!)
                     result.success(true)
                 }
+                "showEmptyOverlay" -> {
+                    if (service == null) return result.success(false)
+                    service.showEmptyOverlay()
+                    result.success(true)
+                }
                 "runRoutine" -> {
                     if (service == null) return result.success(false)
                     service.runRoutine(call.argument<String>("routine")!!)

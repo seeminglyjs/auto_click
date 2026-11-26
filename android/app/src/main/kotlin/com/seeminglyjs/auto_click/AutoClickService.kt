@@ -62,6 +62,10 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
     private val routines = mutableListOf<JSONObject>()
     private var currentId: String? = null
 
+    /** 저장 전 새 작업. null 이 아니면 패널은 프리셋 없이 열린 상태. */
+    private var draft: JSONObject? = null
+    private var draftDirty = false
+
     val isRunning get() = runner?.isRunning == true
     val isOverlayVisible get() = panel != null
 
@@ -154,18 +158,38 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
 
     // ── Flutter 에서 호출 ───────────────────────────────────────────────────
 
+    /** 프리셋 없이 빈 패널(새 작업)로 연다. */
+    fun showEmptyOverlay() {
+        loadRoutines()
+        if (panel == null || draft == null) startDraft()
+        attachOverlay()
+    }
+
+    /** 지정한 프리셋으로 패널을 연다. */
     fun showOverlay(json: String) {
         loadRoutines()
         val r = JSONObject(json)
         upsertLocal(r)
         currentId = r.optString("id")
+        draft = null
+        draftDirty = false
+        attachOverlay()
+    }
+
+    private fun startDraft() {
+        draft = newRoutineJson("새 작업")
+        draftDirty = false
+        currentId = null
+    }
+
+    private fun attachOverlay() {
         if (markers == null) {
             markers = MarkerView(this, ::screenSize).also { wm.addView(it, fullScreenParams(touchable = false)) }
         }
         if (panel == null) addPanel()
         statusText = ""
         refreshViews(structural = true)
-        emit(mapOf("type" to "overlay", "visible" to true, "routineId" to currentId))
+        emitOverlay()
         if (!getSharedPreferences(NATIVE_PREFS, Context.MODE_PRIVATE).getBoolean(HELP_SEEN_KEY, false)) {
             openSheet { it.showHelp() }
         }
@@ -182,6 +206,8 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
         if (panel != null) persistNow()
         panel = null
         markers = null
+        draft = null
+        draftDirty = false
         emit(mapOf("type" to "overlay", "visible" to false))
     }
 
@@ -190,16 +216,16 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
         if (panel == null) return
         val r = JSONObject(json)
         upsertLocal(r)
-        if (r.optString("id") == currentId) refreshViews(structural = true)
+        if (draft == null && r.optString("id") == currentId) refreshViews(structural = true)
     }
 
     fun removeRoutine(id: String) {
         if (panel == null) return
         routines.removeAll { it.optString("id") == id }
-        if (id == currentId) {
-            if (routines.isEmpty()) return hideOverlay()
-            currentId = routines.first().optString("id")
+        if (draft == null && id == currentId) {
+            startDraft()
             refreshViews(structural = true)
+            emitOverlay()
         }
     }
 
@@ -273,7 +299,14 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
                 refreshViews(structural = true)
             }
             override fun onOpenApp() = openApp()
-            override fun onClose() = hideOverlay()
+            override fun onClose() {
+                if (draft != null && draftDirty && (draft?.optJSONArray("steps")?.length() ?: 0) > 0) {
+                    if (isRunning) stopRoutine()
+                    openSheet { it.showCloseConfirm() }
+                } else {
+                    hideOverlay()
+                }
+            }
             override fun onDrag(dx: Int, dy: Int) {
                 val lp = panelParams ?: return
                 lp.x += dx
@@ -506,24 +539,47 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
     }
 
     override fun routineCount() = routines.size
-    override fun routineIndex() = max(0, routines.indexOfFirst { it.optString("id") == currentId })
-    override fun current(): JSONObject? = routines.firstOrNull { it.optString("id") == currentId }
+    override fun routineList(): List<JSONObject> = routines
+    override fun currentId(): String? = if (draft != null) null else currentId
+    override fun isDraft() = draft != null
+    override fun isDraftDirty() = draft != null && draftDirty
+    override fun current(): JSONObject? = draft ?: routines.firstOrNull { it.optString("id") == currentId }
 
-    override fun switchRoutine(delta: Int) {
-        if (routines.isEmpty()) return
-        val i = (routineIndex() + delta).mod(routines.size)
-        currentId = routines[i].optString("id")
+    override fun loadRoutine(id: String) {
+        if (routines.none { it.optString("id") == id }) return
+        if (isRunning) stopRoutine()
+        draft = null
+        draftDirty = false
+        currentId = id
+        statusText = ""
         refreshViews(structural = true)
-        emit(mapOf("type" to "overlay", "visible" to true, "routineId" to currentId))
+        emitOverlay()
+        toast("‘${current()?.optString("name")}’ 을(를) 불러왔어요")
     }
 
-    override fun createRoutine(name: String) {
-        val r = newRoutineJson(name)
-        routines.add(0, r)
-        currentId = r.optString("id")
-        changed(structural = true)
-        toast("‘$name’ 을(를) 만들었어요 · ＋ 추가로 단계를 넣으세요")
+    override fun newDraft() {
+        if (isRunning) stopRoutine()
+        startDraft()
+        statusText = ""
+        refreshViews(structural = true)
+        emitOverlay()
     }
+
+    override fun commitDraft(name: String) {
+        val d = draft ?: return
+        d.put("name", name).put("updatedAt", System.currentTimeMillis())
+        routines.add(0, d)
+        currentId = d.optString("id")
+        draft = null
+        draftDirty = false
+        persistNow()
+        refreshViews(structural = false)
+        emit(mapOf("type" to "routine", "json" to d.toString()))
+        emitOverlay()
+        toast("‘$name’ 프리셋으로 저장했어요")
+    }
+
+    override fun forceClose() = hideOverlay()
 
     override fun renameCurrent(name: String) {
         current()?.put("name", name) ?: return
@@ -532,6 +588,7 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
 
     override fun saveAs(name: String) {
         val src = current() ?: return
+        if (draft != null) return commitDraft(name)
         val copy = JSONObject(src.toString()).put("id", newId()).put("name", name)
         copy.optJSONArray("steps")?.let { arr ->
             for (i in 0 until arr.length()) arr.optJSONObject(i)?.put("id", newId())
@@ -540,6 +597,7 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
         currentId = copy.optString("id")
         changed(structural = true)
         persistNow()
+        emitOverlay()
         toast("‘$name’ (으)로 저장했어요")
     }
 
@@ -571,6 +629,11 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
     override fun onEdited(structural: Boolean) = changed(structural)
 
     override fun saveNow() {
+        if (draft != null) {
+            // 새 작업은 이름을 받아서 프리셋으로 만든다
+            openSheet { it.showNameInput(SheetView.NameMode.SAVE_DRAFT) }
+            return
+        }
         val r = current() ?: return
         r.put("updatedAt", System.currentTimeMillis())
         persistNow()
@@ -589,6 +652,10 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
         val r = current() ?: return
         r.put("updatedAt", System.currentTimeMillis())
         refreshViews(structural)
+        if (draft != null) {
+            draftDirty = true // 새 작업은 저장 버튼을 누르기 전까지 저장하지 않는다
+            return
+        }
         persistSoon()
         emit(mapOf("type" to "routine", "json" to r.toString()))
     }
@@ -603,8 +670,9 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
 
     private fun refreshPanel() {
         val n = current()?.optJSONArray("steps")?.length() ?: 0
-        val name = current()?.optString("name") ?: ""
-        panel?.update(isRunning, statusText.ifEmpty { "$name\n${n}단계" }, markersVisible)
+        val name = if (draft != null) "새 작업" else current()?.optString("name") ?: ""
+        val unsaved = if (draft != null && draftDirty) " •" else ""
+        panel?.update(isRunning, statusText.ifEmpty { "$name$unsaved\n${n}단계" }, markersVisible)
     }
 
     private fun openApp() {
@@ -613,6 +681,10 @@ class AutoClickService : AccessibilityService(), SheetHost, HandleView.Listener 
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_REORDER_TO_FRONT)
         } ?: return
         startActivity(intent)
+    }
+
+    private fun emitOverlay() {
+        emit(mapOf("type" to "overlay", "visible" to (panel != null), "routineId" to currentId()))
     }
 
     private fun toast(msg: String) = Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()

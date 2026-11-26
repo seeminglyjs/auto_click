@@ -27,8 +27,16 @@ class NativeBridge {
   /// 네이티브에서 루틴이 실행 중인지.
   final running = ValueNotifier<bool>(false);
 
-  /// 현재 오버레이에 올라간 루틴 ID (없으면 null).
+  /// 플로팅 패널이 떠 있는지.
+  final overlayVisible = ValueNotifier<bool>(false);
+
+  /// 패널에 불러온 프리셋 ID. 빈 패널(저장 안 된 새 작업)이면 null.
   final overlayRoutineId = ValueNotifier<String?>(null);
+
+  void _setOverlay(bool visible, [String? routineId]) {
+    overlayVisible.value = visible;
+    overlayRoutineId.value = visible ? routineId : null;
+  }
 
   /// 오버레이 패널에서 루틴을 바꾸거나 저장했을 때 호출된다.
   void Function(Routine routine)? onRoutineFromNative;
@@ -51,10 +59,11 @@ class NativeBridge {
     if (enabled) {
       running.value = await _invoke<bool>('isRunning') ?? false;
       final visible = await _invoke<bool>('isOverlayVisible') ?? false;
-      if (!visible) overlayRoutineId.value = null;
+      if (!visible) _setOverlay(false);
+      overlayVisible.value = visible;
     } else {
       running.value = false;
-      overlayRoutineId.value = null;
+      _setOverlay(false);
     }
     return enabled;
   }
@@ -64,13 +73,23 @@ class NativeBridge {
 
   Future<void> openAppSettings() => _invoke('openAppSettings');
 
-  /// 플로팅 패널을 띄워 다른 앱 위에서 위치를 지정/실행할 수 있게 한다.
+  /// 프리셋 없이 빈 플로팅 패널(새 작업)을 띄운다.
+  Future<bool> showEmptyOverlay() async {
+    final ok = await _invoke<bool>('showEmptyOverlay') ?? false;
+    if (ok) {
+      _setOverlay(true);
+      await _invoke('moveToBackground');
+    }
+    return ok;
+  }
+
+  /// 지정한 프리셋으로 플로팅 패널을 띄운다.
   Future<bool> showOverlay(Routine r, {bool goBackground = true}) async {
     final ok = await _invoke<bool>(
             'showOverlay', {'routine': jsonEncode(r.toJson())}) ??
         false;
     if (ok) {
-      overlayRoutineId.value = r.id;
+      _setOverlay(true, r.id);
       if (goBackground) await _invoke('moveToBackground');
     }
     return ok;
@@ -82,7 +101,7 @@ class NativeBridge {
             'runRoutine', {'routine': jsonEncode(r.toJson())}) ??
         false;
     if (ok) {
-      overlayRoutineId.value = r.id;
+      _setOverlay(true, r.id);
       running.value = true;
       await _invoke('moveToBackground');
     }
@@ -96,19 +115,19 @@ class NativeBridge {
 
   Future<void> hideOverlay() async {
     await _invoke('hideOverlay');
-    overlayRoutineId.value = null;
+    _setOverlay(false);
     running.value = false;
   }
 
   /// 오버레이가 떠 있으면 앱에서 편집한 루틴을 오버레이 목록에도 반영한다.
   Future<void> syncIfOverlay(Routine r) async {
-    if (overlayRoutineId.value == null) return;
+    if (!overlayVisible.value) return;
     await _invoke('updateOverlayRoutine', {'routine': jsonEncode(r.toJson())});
   }
 
   /// 앱에서 삭제한 루틴을 오버레이 목록에서도 뺀다.
   Future<void> removeFromOverlay(String id) async {
-    if (overlayRoutineId.value == null) return;
+    if (!overlayVisible.value) return;
     await _invoke('removeOverlayRoutine', {'id': id});
   }
 
@@ -120,17 +139,14 @@ class NativeBridge {
         serviceEnabled.value = ev['enabled'] == true;
         if (!serviceEnabled.value) {
           running.value = false;
-          overlayRoutineId.value = null;
+          _setOverlay(false);
         }
       case 'run':
         running.value = ev['running'] == true;
       case 'overlay':
-        if (ev['visible'] == true) {
-          overlayRoutineId.value = ev['routineId'] as String?;
-        } else {
-          overlayRoutineId.value = null;
-          running.value = false;
-        }
+        final visible = ev['visible'] == true;
+        _setOverlay(visible, ev['routineId'] as String?);
+        if (!visible) running.value = false;
       case 'routine':
         final raw = ev['json'] as String?;
         if (raw != null) {

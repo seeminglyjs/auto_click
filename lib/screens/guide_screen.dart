@@ -303,8 +303,8 @@ class _PanelPage extends StatelessWidget {
             color: _green),
         GuideRow(Icons.add, '추가', '탭 · 길게 · 영역 · 스와이프 · 대기 중 골라 화면에서 위치 지정',
             color: _teal),
-        GuideRow(Icons.settings, '설정', '반복 횟수 · 간격 · 랜덤, 프리셋 전환 · 새 루틴 · 이름 변경'),
-        GuideRow(Icons.save, '저장', '지금 루틴을 프리셋으로 저장 (자동 저장도 됩니다)'),
+        GuideRow(Icons.settings, '설정', '반복 횟수 · 간격 · 랜덤, 저장된 프리셋 불러오기 · 새 작업'),
+        GuideRow(Icons.save, '저장', '이름을 정해 프리셋으로 저장 (불러온 프리셋은 바로 저장)'),
         GuideRow(Icons.visibility, '마커', '화면의 번호 마커 보이기 / 숨기기'),
         GuideRow(Icons.home, '앱', 'Auto Click 앱으로 돌아오기'),
         GuideRow(Icons.drag_indicator, '맨 위 손잡이', '끌면 패널 이동, 누르면 접기 / 펴기'),
@@ -324,7 +324,7 @@ class _FlowPage extends StatelessWidget {
       title: '루틴 만들고 실행하기',
       body: '처음엔 이 순서대로 해보세요.',
       children: [
-        GuideRow(Icons.circle, '패널 열기', '홈에서 “플로팅 패널 열기” → 자동으로 누를 앱을 엽니다.',
+        GuideRow(Icons.circle, '패널 열기', '홈에서 “플로팅 패널 열기” → 빈 패널이 떠요. 자동으로 누를 앱을 엽니다.',
             number: 1, color: _teal),
         GuideRow(Icons.circle, '위치 추가', '패널의 ＋ 추가 → “탭” → 누를 곳을 터치. 번호 마커가 생깁니다.',
             number: 2, color: _teal),
@@ -332,7 +332,7 @@ class _FlowPage extends StatelessWidget {
             '마커를 끌면 위치가 옮겨집니다.', number: 3, color: _teal),
         GuideRow(Icons.circle, '실행', '▶ 실행 → 정해진 간격으로 반복해서 누릅니다. 다시 누르면 정지.',
             number: 4, color: _teal),
-        GuideRow(Icons.circle, '저장', '저장 버튼으로 프리셋 저장. 다음엔 홈 목록에서 ▶ 로 바로 실행!',
+        GuideRow(Icons.circle, '저장', '저장 → 이름 입력 → 프리셋 저장. 다음엔 홈 목록에서 ▶ 실행이나 “이 루틴으로 패널 열기”.',
             number: 5, color: _teal),
       ],
     );

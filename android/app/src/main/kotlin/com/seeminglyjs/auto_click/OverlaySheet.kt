@@ -23,10 +23,15 @@ import org.json.JSONObject
 /** 시트가 서비스에 요청하는 동작. */
 interface SheetHost {
     fun routineCount(): Int
-    fun routineIndex(): Int
+    fun routineList(): List<JSONObject>
+    fun currentId(): String?
+    fun isDraft(): Boolean
+    fun isDraftDirty(): Boolean
     fun current(): JSONObject?
-    fun switchRoutine(delta: Int)
-    fun createRoutine(name: String)
+    fun loadRoutine(id: String)
+    fun newDraft()
+    fun commitDraft(name: String)
+    fun forceClose()
     fun renameCurrent(name: String)
     fun saveAs(name: String)
     fun deleteStep(index: Int)
@@ -138,28 +143,26 @@ class SheetView(context: Context, private val host: SheetHost) : LinearLayout(co
         body.removeAllViews()
         scroll.scrollTo(0, 0)
 
-        // 프리셋 전환
-        section("프리셋")
-        val presetRow = row()
-        presetRow.addView(iconButton(Glyph.BACK) { host.switchRoutine(-1); showSettings() },
-            LayoutParams(context.dpi(40f), context.dpi(40f)))
-        presetRow.addView(TextView(context).apply {
-            text = r.optString("name", "루틴") + "\n${host.routineIndex() + 1} / ${host.routineCount()}"
+        // 현재 작업
+        val draft = host.isDraft()
+        section(if (draft) "현재 작업 · 저장 안 됨" else "현재 프리셋")
+        body.addView(TextView(context).apply {
+            text = if (draft) "새 작업" else r.optString("name", "루틴")
             setTextColor(Color.WHITE)
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
-            gravity = Gravity.CENTER
-            maxLines = 2
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 17f)
+            paint.isFakeBoldText = true
+            maxLines = 1
             ellipsize = TextUtils.TruncateAt.END
-        }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
-        presetRow.addView(IconCircle(context, Glyph.BACK, CHIP_BG).apply {
-            rotation = 180f
-            setOnClickListener { host.switchRoutine(1); showSettings() }
-        }, LayoutParams(context.dpi(40f), context.dpi(40f)))
-        body.addView(presetRow)
+            setPadding(0, context.dpi(4f), 0, 0)
+        })
+        if (draft) body.addView(hint("저장 버튼을 누르면 이름을 정해 프리셋으로 저장됩니다."))
         val actions = row()
-        actions.addView(chip("새 루틴") { showNameInput(NameMode.NEW) }, weighted())
-        actions.addView(chip("이름 변경") { showNameInput(NameMode.RENAME) }, weighted())
-        actions.addView(chip("다른 이름 저장") { showNameInput(NameMode.SAVE_AS) }, weighted())
+        actions.addView(chip("불러오기") { showPresets() }, weighted())
+        actions.addView(chip("새 작업") {
+            if (host.isDraftDirty()) showDiscardConfirm { host.newDraft(); showSettings() }
+            else { host.newDraft(); showSettings() }
+        }, weighted())
+        if (!draft) actions.addView(chip("이름 변경") { showNameInput(NameMode.RENAME) }, weighted())
         body.addView(actions)
 
         // 반복 설정
@@ -206,9 +209,12 @@ class SheetView(context: Context, private val host: SheetHost) : LinearLayout(co
             }
         }
 
-        body.addView(primary("저장", GREEN) { host.saveNow() }, LayoutParams(LayoutParams.MATCH_PARENT, context.dpi(48f)).apply {
-            topMargin = context.dpi(18f)
-        })
+        body.addView(primary(if (host.isDraft()) "프리셋으로 저장" else "저장", GREEN) { host.saveNow() },
+            LayoutParams(LayoutParams.MATCH_PARENT, context.dpi(48f)).apply { topMargin = context.dpi(18f) })
+        if (!host.isDraft()) {
+            body.addView(chip("다른 이름으로 저장") { showNameInput(NameMode.SAVE_AS) },
+                LayoutParams(LayoutParams.MATCH_PARENT, context.dpi(40f)).apply { topMargin = context.dpi(8f) })
+        }
         body.addView(chip("사용 방법 보기") { showHelp() }, LayoutParams(LayoutParams.MATCH_PARENT, context.dpi(40f)).apply {
             topMargin = context.dpi(8f)
         })
@@ -286,19 +292,20 @@ class SheetView(context: Context, private val host: SheetHost) : LinearLayout(co
     // ── 3) 이름 입력 ──────────────────────────────────────────────────────────
 
     enum class NameMode(val title: String, val button: String) {
-        NEW("새 루틴 만들기", "만들기"),
+        SAVE_DRAFT("프리셋으로 저장", "저장"),
+        SAVE_DRAFT_CLOSE("저장하고 닫기", "저장하고 닫기"),
         RENAME("이름 변경", "변경"),
         SAVE_AS("다른 이름으로 저장", "저장"),
     }
 
     fun showNameInput(mode: NameMode) {
         val r = host.current()
-        setHeader(mode.title, { showSettings() })
+        setHeader(mode.title, if (mode == NameMode.SAVE_DRAFT_CLOSE) ({ showCloseConfirm() }) else ({ showSettings() }))
         body.removeAllViews()
         val input = EditText(context).apply {
             setText(
                 when (mode) {
-                    NameMode.NEW -> "새 루틴 ${host.routineCount() + 1}"
+                    NameMode.SAVE_DRAFT, NameMode.SAVE_DRAFT_CLOSE -> "루틴 ${host.routineCount() + 1}"
                     NameMode.RENAME -> r?.optString("name") ?: ""
                     NameMode.SAVE_AS -> (r?.optString("name") ?: "루틴") + " (복사)"
                 },
@@ -321,11 +328,11 @@ class SheetView(context: Context, private val host: SheetHost) : LinearLayout(co
             val name = input.text.toString().trim().ifEmpty { "이름 없는 루틴" }
             hideKeyboard(input)
             when (mode) {
-                NameMode.NEW -> host.createRoutine(name)
-                NameMode.RENAME -> host.renameCurrent(name)
-                NameMode.SAVE_AS -> host.saveAs(name)
+                NameMode.SAVE_DRAFT -> { host.commitDraft(name); host.closeSheet() }
+                NameMode.SAVE_DRAFT_CLOSE -> { host.commitDraft(name); host.forceClose() }
+                NameMode.RENAME -> { host.renameCurrent(name); showSettings() }
+                NameMode.SAVE_AS -> { host.saveAs(name); showSettings() }
             }
-            showSettings()
         }
         input.setOnEditorActionListener { _, _, _ -> submit(); true }
         body.addView(primary(mode.button, ACCENT) { submit() },
@@ -344,6 +351,67 @@ class SheetView(context: Context, private val host: SheetHost) : LinearLayout(co
             .hideSoftInputFromWindow(v.windowToken, 0)
     }
 
+    // ── 프리셋 불러오기 ──────────────────────────────────────────────────────
+
+    fun showPresets() {
+        host.setSheetFocusable(false)
+        setHeader("프리셋 불러오기", { showSettings() })
+        body.removeAllViews()
+        scroll.scrollTo(0, 0)
+        if (host.isDraftDirty()) {
+            body.addView(hint("지금 새 작업은 저장되지 않았어요. 불러오면 사라집니다."))
+        }
+        val list = host.routineList()
+        if (list.isEmpty()) {
+            body.addView(hint("저장된 프리셋이 없어요. 새 작업을 만든 뒤 저장 버튼으로 저장하세요."))
+        }
+        for (r in list) {
+            val id = r.optString("id")
+            val n = r.optJSONArray("steps")?.length() ?: 0
+            val loops = r.optLong("loopCount", 1)
+            val label = TextView(context).apply {
+                text = (if (id == host.currentId()) "✓  " else "") + r.optString("name", "루틴") +
+                    "\n${n}단계 · " + (if (loops == 0L) "무한 반복" else "${loops}회 반복")
+            }
+            body.addView(listRow(label) {
+                host.loadRoutine(id)
+                host.closeSheet()
+            }.apply { label.maxLines = 2 })
+        }
+    }
+
+    /** 저장 안 한 새 작업이 있을 때 닫기 확인. */
+    fun showCloseConfirm() {
+        host.setSheetFocusable(false)
+        setHeader("저장하지 않은 작업", null)
+        body.removeAllViews()
+        body.addView(TextView(context).apply {
+            text = "새 작업에 추가한 단계가 저장되지 않았어요.\n프리셋으로 저장할까요?"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+        })
+        body.addView(primary("저장하고 닫기", GREEN) { showNameInput(NameMode.SAVE_DRAFT_CLOSE) },
+            LayoutParams(LayoutParams.MATCH_PARENT, context.dpi(48f)).apply { topMargin = context.dpi(18f) })
+        body.addView(primary("저장 안 하고 닫기", 0xFF8E2C2C.toInt()) { host.forceClose() },
+            LayoutParams(LayoutParams.MATCH_PARENT, context.dpi(44f)).apply { topMargin = context.dpi(8f) })
+        body.addView(chip("계속 편집") { host.closeSheet() },
+            LayoutParams(LayoutParams.MATCH_PARENT, context.dpi(40f)).apply { topMargin = context.dpi(8f) })
+    }
+
+    private fun showDiscardConfirm(onConfirm: () -> Unit) {
+        setHeader("새 작업 시작", { showSettings() })
+        body.removeAllViews()
+        body.addView(TextView(context).apply {
+            text = "지금 작업은 저장되지 않았어요. 버리고 새로 시작할까요?"
+            setTextColor(Color.WHITE)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+        })
+        body.addView(primary("먼저 저장하기", GREEN) { showNameInput(NameMode.SAVE_DRAFT) },
+            LayoutParams(LayoutParams.MATCH_PARENT, context.dpi(48f)).apply { topMargin = context.dpi(18f) })
+        body.addView(primary("버리고 새로 시작", 0xFF8E2C2C.toInt()) { onConfirm() },
+            LayoutParams(LayoutParams.MATCH_PARENT, context.dpi(44f)).apply { topMargin = context.dpi(8f) })
+    }
+
     // ── 4) 사용 방법 ──────────────────────────────────────────────────────────
 
     fun showHelp() {
@@ -355,8 +423,8 @@ class SheetView(context: Context, private val host: SheetHost) : LinearLayout(co
             Glyph.ADD to "추가 — 탭 · 길게 · 영역 · 스와이프 · 대기 중 고른 뒤, 화면에서 원하는 위치를 누르거나 드래그하세요. 순서대로 번호가 붙습니다.",
             Glyph.TAP to "마커 — 멈춘 상태에서 번호 마커를 누르면 클릭 주기 · 반복 횟수를 바꿀 수 있고, 끌어서 위치를 옮길 수 있습니다.",
             Glyph.PLAY to "실행 / 정지 — 단계를 순서대로 반복합니다. 실행 중엔 마커가 터치를 막지 않습니다.",
-            Glyph.SETTINGS to "설정 — 루프 횟수 · 간격 · 랜덤, 프리셋 전환 · 새 루틴 · 이름 변경.",
-            Glyph.SAVE to "저장 — 지금 루틴을 프리셋으로 저장합니다. (변경 사항은 자동으로도 저장됩니다)",
+            Glyph.SETTINGS to "설정 — 루프 횟수 · 간격 · 랜덤, 저장된 프리셋 불러오기 · 새 작업 · 이름 변경.",
+            Glyph.SAVE to "저장 — 새 작업은 이름을 정해 프리셋으로 저장합니다. 불러온 프리셋은 바로 저장됩니다.",
             Glyph.GRIP to "맨 위 점(⠿)을 끌면 패널 이동, 누르면 접기 / 펴기.",
         )
         for ((g, text) in items) {
