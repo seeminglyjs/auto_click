@@ -6,12 +6,14 @@ Flutter로 만든 자동 클릭 앱입니다. 지점 탭, 영역 랜덤 탭, 길
 
 **[최신 릴리즈 페이지](https://github.com/seeminglyjs/auto_click/releases/latest)**
 
+아래 링크는 항상 **최신 릴리즈**의 파일을 바로 받습니다.
+
 | 파일 | 대상 |
 | --- | --- |
-| **[AutoClick-v1.0.0-arm64-v8a.apk](https://github.com/seeminglyjs/auto_click/releases/download/v1.0.0/AutoClick-v1.0.0-arm64-v8a.apk)** (17 MB) | 대부분의 최신 안드로이드 폰 (**권장**) |
-| [AutoClick-v1.0.0-armeabi-v7a.apk](https://github.com/seeminglyjs/auto_click/releases/download/v1.0.0/AutoClick-v1.0.0-armeabi-v7a.apk) (15 MB) | 오래된 32비트 폰 |
-| [AutoClick-v1.0.0-x86_64.apk](https://github.com/seeminglyjs/auto_click/releases/download/v1.0.0/AutoClick-v1.0.0-x86_64.apk) (19 MB) | 에뮬레이터 / x86 기기 |
-| [AutoClick-v1.0.0-universal.apk](https://github.com/seeminglyjs/auto_click/releases/download/v1.0.0/AutoClick-v1.0.0-universal.apk) (49 MB) | 기기 종류를 모를 때 (모든 기기) |
+| **[AutoClick-arm64-v8a.apk](https://github.com/seeminglyjs/auto_click/releases/latest/download/AutoClick-arm64-v8a.apk)** | 대부분의 최신 안드로이드 폰 (**권장**) |
+| [AutoClick-armeabi-v7a.apk](https://github.com/seeminglyjs/auto_click/releases/latest/download/AutoClick-armeabi-v7a.apk) | 오래된 32비트 폰 |
+| [AutoClick-x86_64.apk](https://github.com/seeminglyjs/auto_click/releases/latest/download/AutoClick-x86_64.apk) | 에뮬레이터 / x86 기기 |
+| [AutoClick-universal.apk](https://github.com/seeminglyjs/auto_click/releases/latest/download/AutoClick-universal.apk) | 기기 종류를 모를 때 (모든 기기, 용량 큼) |
 
 Android 7.0 이상에서 동작합니다. 폰에서 링크를 눌러 받은 뒤 설치하세요. 설치할 때 "출처를 알 수 없는 앱" 허용이 필요할 수 있습니다. 설치 후에는 아래 [Android 사용법](#android-사용법)을 따라 하면 됩니다.
 
@@ -75,6 +77,21 @@ flutter run -d <ios-device>       # iOS (macOS + Xcode 필요)
 flutter build apk --release
 flutter build web
 flutter build ios
+```
+
+### 릴리즈 올리기
+
+README 다운로드 링크는 `releases/latest/download/<파일명>` 형식이라 **파일명이 버전마다 같아야** 최신 릴리즈로 자동 연결됩니다. 새 버전을 올릴 때도 파일명에 버전을 넣지 말고 아래 이름을 그대로 쓰세요.
+
+```bash
+flutter build apk --release --split-per-abi
+flutter build apk --release
+cd build/app/outputs/flutter-apk
+cp app-arm64-v8a-release.apk   AutoClick-arm64-v8a.apk
+cp app-armeabi-v7a-release.apk AutoClick-armeabi-v7a.apk
+cp app-x86_64-release.apk      AutoClick-x86_64.apk
+cp app-release.apk             AutoClick-universal.apk
+gh release create v1.x.x AutoClick-*.apk --title "Auto Click v1.x.x" --notes "..."
 ```
 
 > Windows에서 프로젝트 경로가 길면 셰이더 컴파일 단계에서 `Could not write file` 오류가 날 수 있습니다(MAX_PATH 260자 제한). 짧은 경로(예: `C:\src\auto_click`)로 옮겨서 빌드하세요.
